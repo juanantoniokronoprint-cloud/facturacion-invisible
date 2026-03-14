@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facturación Invisible</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #eef2f7;
+            color: #142032;
+        }
+        .shell { max-width: 1280px; margin: 0 auto; padding: 28px 20px 60px; }
+        .hero {
+            display: grid;
+            grid-template-columns: 1.2fr 0.8fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 18px 60px rgba(18, 32, 50, 0.08);
+        }
+        .eyebrow {
+            display: inline-block;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .12em;
+            text-transform: uppercase;
+            color: #0f766e;
+            margin-bottom: 12px;
+        }
+        h1 {
+            font-size: clamp(32px, 4vw, 52px);
+            line-height: 0.95;
+            margin-bottom: 18px;
+        }
+        h2 { font-size: 22px; margin-bottom: 14px; }
+        h3 { font-size: 18px; margin-bottom: 10px; }
+        p, li, td, th, input, button, select, textarea {
+            font-size: 15px;
+            line-height: 1.5;
+        }
+        .lead { color: #566273; max-width: 58ch; margin-bottom: 18px; }
+        .pill-row {
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px;
+        }
+        .pill {
+            padding: 10px 12px;
+            border-radius: 999px;
+            background: #f4f7fb;
+            color: #334155;
+            border: 1px solid #e4ebf3;
+            font-size: 13px;
+        }
+        .quick-actions { display: grid; gap: 10px; }
+        .btn {
+            border: none;
+            border-radius: 12px;
+            padding: 11px 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .btn-primary { background: #0f172a; color: #fff; }
+        .btn-secondary { background: #e7eef8; color: #17314d; }
+        .btn-success { background: #0f766e; color: #fff; }
+        .btn-warn { background: #f59e0b; color: #fff; }
+        .btn-danger { background: #dc2626; color: #fff; }
+        .btn-sm { padding: 8px 10px; border-radius: 10px; font-size: 13px; }
+        .btn-lg { padding: 14px 20px; font-size: 16px; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .tab {
+            border: none;
+            border-radius: 999px;
+            padding: 10px 16px;
+            background: #dbe4ef;
+            color: #17314d;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.2s;
+        }
+        .tab:hover { background: #c9d6e6; }
+        .tab.active { background: #0f172a; color: white; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 20px; }
+        .stat-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 14px 44px rgba(18, 32, 50, 0.06); }
+        .stat-label { color: #64748b; margin-bottom: 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+        .stat-value { font-size: 34px; font-weight: 800; }
+        .stat-value.positive { color: #0f766e; }
+        .stat-value.warning { color: #f59e0b; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 14px 12px; border-bottom: 1px solid #e8edf5; text-align: left; vertical-align: top; }
+        th { color: #4b5563; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; background: #f8fafc; }
+        tr:hover td { background: #fafcff; }
+        .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+        .badge-paid { background: #dcfce7; color: #166534; }
+        .badge-pending { background: #fef3c7; color: #92400e; }
+        .badge-other { background: #e2e8f0; color: #334155; }
+        .badge-verifactu { background: #dbeafe; color: #1d4ed8; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 14px;
+        }
+        .field { margin-bottom: 12px; }
+        .field label { display: block; font-weight: 600; margin-bottom: 6px; font-size: 14px; }
+        .field input, .field select, .field textarea {
+            width: 100%;
+            padding: 11px 12px;
+            border-radius: 12px;
+            border: 1px solid #d8e0ea;
+            background: #fff;
+            font-size: 15px;
+        }
+        .field input:focus, .field select:focus, .field textarea:focus {
+            outline: none;
+            border-color: #0f766e;
+            box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
+        }
+        .field .hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+        .notice {
+            margin-top: 14px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            display: none;
+        }
+        .notice.error { background: #fef2f2; color: #b91c1c; }
+        .notice.success { background: #f0fdf4; color: #166534; }
+        .empty { text-align: center; color: #64748b; padding: 36px 0; }
+        .muted { color: #64748b; }
+        .search-box {
+            display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap;
+        }
+        .search-box input {
+            flex: 1; min-width: 200px;
+            padding: 10px 14px; border-radius: 10px;
+            border: 1px solid #d8e0ea; font-size: 15px;
+        }
+        .search-box input:focus { outline: none; border-color: #0f766e; }
+        
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            align-items: center; justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: white; border-radius: 20px; padding: 28px;
+            max-width: 600px; width: 100%; max-height: 90vh; overflow-y: auto;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.2);
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-close {
+            background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;
+            padding: 4px 8px; border-radius: 8px;
+        }
+        .modal-close:hover { background: #f1f5f9; }
+        
+        /* Help / Tutorial */
+        .help-card {
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border: 1px solid #bae6fd; border-radius: 16px; padding: 20px; margin-bottom: 20px;
+        }
+        .help-card h3 { color: #0369a1; margin-bottom: 12px; }
+        .help-card ol { padding-left: 20px; color: #075985; }
+        .help-card li { margin-bottom: 8px; }
+        
+        /* Chart placeholder */
+        .chart-container {
+            background: white; border-radius: 16px; padding: 20px;
+            box-shadow: 0 14px 44px rgba(18, 32, 50, 0.06); margin-bottom: 20px;
+        }
+        .bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding: 10px 0; }
+        .bar {
+            flex: 1; background: linear-gradient(180deg, #0f766e 0%, #14b8a6 100%);
+            border-radius: 6px 6px 0 0; min-height: 4px; position: relative;
+            transition: height 0.3s ease;
+        }
+        .bar:hover { opacity: 0.8; }
+        .bar-label {
+            position: absolute; bottom: -24px; left: 50%; transform: translateX(-50%);
+            font-size: 11px; color: #64748b; white-space: nowrap;
+        }
+        .bar-value {
+            position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
+            font-size: 11px; font-weight: 600; color: #0f766e;
+        }
+        
+        /* Responsive */
+        @media (max-width: 920px) {
+            .hero { grid-template-columns: 1fr; }
+            .actions { flex-direction: column; }
+            .btn-sm { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <section class="hero">
+            <div class="card">
+                <span class="eyebrow">Factura Invisible</span>
+                <h1>Gestiona tu facturación sin complicaciones</h1>
+                <p class="lead">
+                    Crea facturas, envíaselas a tus clientes y reporta a tu asesor contable. 
+                    Todo desde aquí, sin paperwork.
+                </p>
+                <div class="pill-row">
+                    <span class="pill">📄 PDF automático</span>
+                    <span class="pill">📧 Envío por email</span>
+                    <span class="pill">💬 WhatsApp</span>
+                    <span class="pill">📊 Reportes</span>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Acciones principales</h2>
+                <div class="quick-actions">
+                    <button class="btn btn-success btn-lg" onclick="openNewFacturaModal()">➕ Nueva Factura</button>
+                    <button class="btn btn-primary" onclick="showTab('facturas')">📋 Ver facturas</button>
+                    <button class="btn btn-secondary" onclick="showTab('informes')">📈 Informes</button>
+                    <button class="btn btn-secondary" onclick="showTab('config')">⚙️ Configuración</button>
+                </div>
+                <div id="global-notice" class="notice" style="margin-top:14px;"></div>
+            </div>
+        </section>
+
+        <!-- Tutorial/Help -->
+        <div class="help-card" id="help-card">
+            <h3>📚 Cómo usar Facturación Invisible</h3>
+            <ol>
+                <li><strong>Nueva factura:</strong> Haz clic en "➕ Nueva Factura" y completa los datos del cliente y el concepto</li>
+                <li><strong>Enviar al cliente:</strong> Desde la lista de facturas, haz clic en "Email" o "WhatsApp"</li>
+                <li><strong>Contabilidad:</strong> Envía un paquete con todas las facturas a tu asesor con un clic</li>
+                <li><strong>¿Necesitas ayuda?</strong> Escribe a tu gestor o consulta la sección de configuración</li>
+            </ol>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="facturas" onclick="showTab('facturas')">Facturas</button>
+            <button class="tab" data-tab="informes" onclick="showTab('informes')">Informes</button>
+            <button class="tab" data-tab="config" onclick="showTab('config')">Empresa</button>
+        </div>
+
+        <section id="facturas-tab">
+            <div class="stats" id="stats"></div>
+            
+            <!-- Gráfico simple -->
+            <div class="chart-container" id="chart-section" style="display:none;">
+                <h3>Facturación mensual <span class="muted" id="chart-year"></span></h3>
+                <div class="bar-chart" id="bar-chart"></div>
+            </div>
+
+            <div class="card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:10px;">
+                    <h2>Facturas emitidas</h2>
+                    <div style="display:flex; gap:10px;">
+                        <select id="filtro-estado" onchange="filtrarFacturas()" style="padding:8px 12px;border-radius:8px;border:1px solid #d8e0ea;">
+                            <option value="">Todos los estados</option>
+                            <option value="pendiente">Pendiente</option>
+                            <option value="pagada">Pagada</option>
+                        </select>
+                        <button class="btn btn-sm btn-secondary" onclick="exportarFacturas('csv')">📥 CSV</button>
+                    </div>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="buscar-factura" placeholder="Buscar por cliente o número..." onkeyup="buscarFacturas(this.value)">
+                    <button class="btn btn-primary" onclick="buscarFacturas(document.getElementById('buscar-factura').value)">Buscar</button>
+                </div>
+                <div style="overflow:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Número</th>
+                                <th>Fecha</th>
+                                <th>Cliente</th>
+                                <th>Base</th>
+                                <th>Total</th>
+                                <th>Estado</th>
+                                <th>VeriFactu</th>
+                                <th>Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="facturas-list">
+                            <tr><td colspan="8" class="empty">Cargando facturas...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section id="informes-tab" style="display:none;">
+            <div class="card">
+                <h2>📊 Informe para contabilidad</h2>
+                <p class="lead">Genera un resumen y envíalo junto con todas las facturas al correo de contabilidad.</p>
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Año</label>
+                        <input id="report-year" type="number" min="2024" max="2099">
+                    </div>
+                    <div class="field">
+                        <label>Mes (opcional)</label>
+                        <select id="report-month">
+                            <option value="">Todo el año</option>
+                            <option value="1">Enero</option>
+                            <option value="2">Febrero</option>
+                            <option value="3">Marzo</option>
+                            <option value="4">Abril</option>
+                            <option value="5">Mayo</option>
+                            <option value="6">Junio</option>
+                            <option value="7">Julio</option>
+                            <option value="8">Agosto</option>
+                            <option value="9">Septiembre</option>
+                            <option value="10">Octubre</option>
+                            <option value="11">Noviembre</option>
+                            <option value="12">Diciembre</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Email contabilidad</label>
+                        <input id="report-email" type="email" placeholder="contabilidad@tuempresa.es">
+                    </div>
+                    <div class="field">
+                        <label>Email asesor (copia)</label>
+                        <input id="advisor-email" type="email" placeholder="asesor@tuempresa.es">
+                    </div>
+                </div>
+                <div style="margin-top:18px;">
+                    <button class="btn btn-success" onclick="sendInformeContabilidad()">📤 Generar y enviar</button>
+                </div>
+                <div id="report-result" class="notice"></div>
+            </div>
+        </section>
+
+        <section id="config-tab" style="display:none;">
+            <div class="card">
+                <h2>Datos de tu empresa (emisor)</h2>
+                <p class="lead">Estos datos aparecerán en todas las facturas que.emitas.</p>
+                <form id="config-form">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label>NIF / CIF</label>
+                            <input id="emisor_nif" name="nif" type="text" placeholder="12345678A">
+                            <div class="hint">Identificador fiscal de tu empresa</div>
+                        </div>
+                        <div class="field">
+                            <label>Nombre o razón social</label>
+                            <input id="emisor_nombre" name="nombre" type="text" placeholder="Mi Empresa SL">
+                        </div>
+                        <div class="field">
+                            <label>Domicilio</label>
+                            <input id="emisor_domicilio" name="domicilio" type="text" placeholder="Calle Mayor 1">
+                        </div>
+                        <div class="field">
+                            <label>Código postal</label>
+                            <input id="emisor_cp" name="cp" type="text" placeholder="46001">
+                        </div>
+                        <div class="field">
+                            <label>Población</label>
+                            <input id="emisor_poblacion" name="poblacion" type="text" placeholder="Valencia">
+                        </div>
+                        <div class="field">
+                            <label>Provincia</label>
+                            <input id="emisor_provincia" name="provincia" type="text" placeholder="Valencia">
+                        </div>
+                        <div class="field">
+                            <label>📧 Email contabilidad</label>
+                            <input id="contabilidad_email" type="email" placeholder="contabilidad@tuempresa.es">
+                            <div class="hint">Recibe los informes mensuales</div>
+                        </div>
+                        <div class="field">
+                            <label>📧 Email asesor (copia)</label>
+                            <input id="asesor_email" type="email" placeholder="asesor@tuempresa.es">
+                            <div class="hint">Recibe copia de facturas</div>
+                        </div>
+                        <div class="field" style="grid-column: 1 / -1; background: #f0f9ff; padding: 16px; border-radius: 12px; border: 1px solid #bae6fd;">
+                            <label style="color: #0369a1; font-weight: 600;">📱 Teléfonos autorizados (WhatsApp)</label>
+                            <input id="telefonos_autorizados" type="text" placeholder="+34600000000=Juan, +34600000001=María" style="margin-top: 8px;">
+                            <div class="hint" style="color: #075985;">Formato: +34XXXXXXXXX=Nombre separados por coma</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:18px;">
+                        <button class="btn btn-primary" type="submit">💾 Guardar cambios</button>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </div>
+
+    <!-- Modal Nueva Factura -->
+    <div class="modal-overlay" id="new-factura-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>➕ Nueva Factura</h2>
+                <button class="modal-close" onclick="closeNewFacturaModal()">×</button>
+            </div>
+            <form id="new-factura-form">
+                <h3 style="margin-top:16px;">Datos del cliente</h3>
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Nombre del cliente *</label>
+                        <input type="text" id="cliente_nombre" required placeholder="Juan Pérez">
+                    </div>
+                    <div class="field">
+                        <label>NIF / NIE (opcional)</label>
+                        <input type="text" id="cliente_nif" placeholder="12345678A">
+                        <div class="hint">Obligatorio si la factura supera 400€</div>
+                    </div>
+                    <div class="field">
+                        <label>Email</label>
+                        <input type="email" id="cliente_email" placeholder="juan@ejemplo.es">
+                    </div>
+                    <div class="field">
+                        <label>Teléfono</label>
+                        <input type="tel" id="cliente_telefono" placeholder="600123456">
+                    </div>
+                </div>
+                
+                <h3 style="margin-top:20px;">Datos de la factura</h3>
+                <div class="form-grid">
+                    <div class="field">
+                        <label>Concepto *</label>
+                        <input type="text" id="factura_concepto" required placeholder="Servicio de fontanería">
+                    </div>
+                    <div class="field">
+                        <label>Importe (sin IVA) *</label>
+                        <input type="number" id="factura_base" required step="0.01" min="0" placeholder="100.00">
+                    </div>
+                    <div class="field">
+                        <label>IVA (%)</label>
+                        <select id="factura_iva">
+                            <option value="21">21% (general)</option>
+                            <option value="10">10% (reducido)</option>
+                            <option value="4">4% (superreducido)</option>
+                            <option value="0">0% (exento)</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>IRPF (%)</label>
+                        <select id="factura_irpf">
+                            <option value="0">0% (sin retención)</option>
+                            <option value="15">15% (profesionales)</option>
+                            <option value="19">19% (arrendamientos)</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Estado</label>
+                        <select id="factura_estado">
+                            <option value="pendiente">Pendiente de pago</option>
+                            <option value="pagada">Pagada</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div style="background:#f8fafc; padding:14px; border-radius:12px; margin-top:16px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span>Base imponible:</span>
+                        <span id="preview-base">0.00 €</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span>IVA:</span>
+                        <span id="preview-iva">0.00 €</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span>IRPF:</span>
+                        <span id="preview-irpf">0.00 €</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-weight:700; font-size:18px; border-top:1px solid #e2e8f0; padding-top:8px; margin-top:8px;">
+                        <span>Total:</span>
+                        <span id="preview-total">0.00 €</span>
+                    </div>
+                </div>
+                
+                <div id="factura-form-notice" class="notice"></div>
+                
+                <div style="margin-top:20px; display:flex; gap:10px; justify-content:flex-end;">
+                    <button type="button" class="btn btn-secondary" onclick="closeNewFacturaModal()">Cancelar</button>
+                    <button type="submit" class="btn btn-success">✅ Crear Factura</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal Editar Factura -->
+    <div class="modal-overlay" id="edit-factura-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>✏️ Editar Factura</h2>
+                <button class="modal-close" onclick="document.getElementById('edit-factura-modal').classList.remove('active')">×</button>
+            </div>
+            <input type="hidden" id="edit-factura-id">
+            <div class="form-grid">
+                <div class="field">
+                    <label>Base imponible (€)</label>
+                    <input type="number" id="edit-base" step="0.01" oninput="calcularEditPreview()">
+                </div>
+                <div class="field">
+                    <label>IVA (%)</label>
+                    <select id="edit-iva" onchange="calcularEditPreview()">
+                        <option value="21">21%</option>
+                        <option value="10">10%</option>
+                        <option value="4">4%</option>
+                        <option value="0">0%</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>IRPF (%)</label>
+                    <select id="edit-irpf" onchange="calcularEditPreview()">
+                        <option value="0">0%</option>
+                        <option value="15">15%</option>
+                        <option value="19">19%</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Estado</label>
+                    <select id="edit-estado">
+                        <option value="pendiente">Pendiente</option>
+                        <option value="pagada">Pagada</option>
+                    </select>
+                </div>
+            </div>
+            <div id="edit-preview" style="background:#f8fafc;padding:12px;border-radius:10px;margin:16px 0;font-size:14px;"></div>
+            <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+                <button class="btn btn-secondary" onclick="document.getElementById('edit-factura-modal').classList.remove('active')">Cancelar</button>
+                <button class="btn btn-primary" onclick="guardarEdicion()">💾 Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const yearInput = document.getElementById('report-year');
+        yearInput.value = new Date().getFullYear();
+        document.getElementById('chart-year').textContent = new Date().getFullYear();
+
+        // Preview calculation
+        document.getElementById('factura_base').addEventListener('input', calcularPreview);
+        document.getElementById('factura_iva').addEventListener('change', calcularPreview);
+        document.getElementById('factura_irpf').addEventListener('change', calcularPreview);
+        document.getElementById('cliente_nif').addEventListener('input', validarNifEnTiempoReal);
+
+        function validarNifEnTiempoReal() {
+            const nif = document.getElementById('cliente_nif').value.trim().toUpperCase();
+            const base = parseFloat(document.getElementById('factura_base').value) || 0;
+            const ivaPct = parseFloat(document.getElementById('factura_iva').value) || 0;
+            const totalConIva = base * (1 + ivaPct / 100);
+            const hintEl = document.getElementById('cliente_nif').nextElementSibling;
+            
+            if (!nif) {
+                if (totalConIva > 400) {
+                    hintEl.textContent = '⚠️ Obligatorio: la factura supera 400€';
+                    hintEl.style.color = '#b91c1c';
+                } else {
+                    hintEl.textContent = 'Obligatorio si la factura supera 400€';
+                    hintEl.style.color = '#64748b';
+                }
+                return;
+            }
+            
+            // Validar formato NIF español
+            const nifRegex = /^[XYZ]?\d{7,8}[A-Z]$/;
+            if (nifRegex.test(nif)) {
+                hintEl.textContent = '✓ NIF válido';
+                hintEl.style.color = '#166534';
+            } else {
+                hintEl.textContent = '⚠️ Formato inválido (ej: 12345678A)';
+                hintEl.style.color = '#b91c1c';
+            }
+        }
+
+        function calcularPreview() {
+            const base = parseFloat(document.getElementById('factura_base').value) || 0;
+            const ivaPct = parseFloat(document.getElementById('factura_iva').value) || 0;
+            const irpfPct = parseFloat(document.getElementById('factura_irpf').value) || 0;
+            
+            const iva = base * ivaPct / 100;
+            const irpf = base * irpfPct / 100;
+            const total = base + iva - irpf;
+            
+            document.getElementById('preview-base').textContent = base.toFixed(2) + ' €';
+            document.getElementById('preview-iva').textContent = iva.toFixed(2) + ' €';
+            document.getElementById('preview-irpf').textContent = '-' + irpf.toFixed(2) + ' €';
+            document.getElementById('preview-total').textContent = total.toFixed(2) + ' €';
+        }
+
+        function showNotice(message, isError = false, targetId = 'global-notice', isSuccess = false) {
+            const node = document.getElementById(targetId);
+            node.textContent = message;
+            node.className = `notice${isError ? ' error' : ''}${isSuccess ? ' success' : ''}`;
+            node.style.display = 'block';
+            if (!isError && !isSuccess) {
+                setTimeout(() => { node.style.display = 'none'; }, 5000);
+            }
+        }
+
+        function clearNotice(targetId = 'global-notice') {
+            const node = document.getElementById(targetId);
+            node.textContent = '';
+            node.className = 'notice';
+            node.style.display = 'none';
+        }
+
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach((node) => {
+                node.classList.toggle('active', node.dataset.tab === tab);
+            });
+            document.getElementById('facturas-tab').style.display = tab === 'facturas' ? 'block' : 'none';
+            document.getElementById('config-tab').style.display = tab === 'config' ? 'block' : 'none';
+            document.getElementById('informes-tab').style.display = tab === 'informes' ? 'block' : 'none';
+            document.getElementById('help-card').style.display = tab === 'facturas' ? 'block' : 'none';
+            clearNotice();
+            if (tab === 'facturas') loadFacturas();
+            if (tab === 'config') loadConfig();
+        }
+
+        function estadoBadge(estado) {
+            if (estado === 'pagada') return 'badge badge-paid';
+            if (estado === 'pendiente') return 'badge badge-pending';
+            return 'badge badge-other';
+        }
+
+        async function api(path, options = {}) {
+            const resp = await fetch(path, options);
+            let data = null;
+            const text = await resp.text();
+            try { data = text ? JSON.parse(text) : null; } catch (_) { data = { detail: text }; }
+            if (!resp.ok) {
+                const msg = data?.detail || data?.message || `Error ${resp.status}`;
+                throw new Error(msg);
+            }
+            return data;
+        }
+
+        let facturasCache = [];
+        let currentPage = 0;
+        let currentLimit = 20;
+        let currentTotal = 0;
+
+        let currentBuscar = '';
+        let currentEstado = '';
+
+        async function loadFacturas(buscar = '', estado = '', page = 0) {
+            const tbody = document.getElementById('facturas-list');
+            tbody.innerHTML = '<tr><td colspan="8" class="empty">Cargando facturas...</td></tr>';
+            currentBuscar = buscar;
+            currentEstado = estado;
+            currentPage = page;
+            try {
+                const params = new URLSearchParams();
+                if (buscar) params.set('buscar', buscar);
+                if (estado) params.set('estado', estado);
+                params.set('skip', (page * currentLimit).toString());
+                params.set('limit', currentLimit.toString());
+                const url = `/api/facturas/?${params.toString()}`;
+                const data = await api(url);
+                const facturas = data.facturas || [];
+                currentTotal = data.total || 0;
+                facturasCache = facturas;
+                
+                if (!facturas.length) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="empty">No hay facturas registradas.</td></tr>';
+                    document.getElementById('stats').innerHTML = '';
+                    document.getElementById('chart-section').style.display = 'none';
+                    document.getElementById('pagination').innerHTML = '';
+                    return;
+                }
+
+                let total = 0;
+                let totalBase = 0;
+                let pendiente = 0;
+
+                tbody.innerHTML = facturas.map((factura) => {
+                    total += factura.total || 0;
+                    totalBase += factura.base_imponible || 0;
+                    if (factura.estado === 'pendiente') pendiente += factura.total;
+                    const fecha = factura.fecha_emision ? new Date(factura.fecha_emision).toLocaleDateString('es-ES') : 'N/A';
+                    const verifactuBadge = factura.verifactu_enviada 
+                        ? '<span class="badge badge-verifactu">✓</span>' 
+                        : '<span class="muted">—</span>';
+                    const btnPagada = factura.estado === 'pendiente' 
+                        ? `<button class="btn btn-sm btn-success" style="margin-top:4px;" onclick="marcarPagada(${factura.id})">✓ Cobrada</button>`
+                        : '';
+                    return `
+                        <tr>
+                            <td><strong>${factura.serie}-${factura.numero}</strong></td>
+                            <td>${fecha}</td>
+                            <td>
+                                <strong>${factura.cliente_nombre || 'Sin cliente'}</strong><br>
+                                <span class="muted">${factura.cliente_email || 'sin email'}</span>
+                            </td>
+                            <td>${(factura.base_imponible || 0).toFixed(2)} €</td>
+                            <td><strong>${(factura.total || 0).toFixed(2)} €</strong></td>
+                            <td><span class="${estadoBadge(factura.estado)}">${factura.estado || 'borrador'}</span></td>
+                            <td>${verifactuBadge}</td>
+                            <td>
+                                <div class="actions">
+                                    <a class="btn btn-sm btn-secondary" href="/api/facturas/${factura.id}/pdf" target="_blank">📄</a>
+                                    <button class="btn btn-sm btn-primary" onclick="sendFacturaEmail(${factura.id})">✉️</button>
+                                    <button class="btn btn-sm btn-success" onclick="shareFacturaWhatsapp(${factura.id})">💬</button>
+                                    <button class="btn btn-sm btn-warn" onclick="editarFactura(${factura.id})">✏️</button>
+                                    ${btnPagada}
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
+
+                document.getElementById('stats').innerHTML = `
+                    <div class="stat-card"><div class="stat-label">Total facturado</div><div class="stat-value positive">${total.toFixed(2)} €</div></div>
+                    <div class="stat-card"><div class="stat-label">Base imponible</div><div class="stat-value">${totalBase.toFixed(2)} €</div></div>
+                    <div class="stat-card"><div class="stat-label">Pendiente cobro</div><div class="stat-value warning">${pendiente.toFixed(2)} €</div></div>
+                    <div class="stat-card"><div class="stat-label">Facturas</div><div class="stat-value">${facturas.length}/${currentTotal}</div></div>
+                `;
+                
+                renderChart(facturas);
+                renderPagination();
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="8" class="empty">${error.message}</td></tr>`;
+            }
+        }
+
+        function renderPagination() {
+            const totalPages = Math.ceil(currentTotal / currentLimit);
+            if (totalPages <= 1) {
+                document.getElementById('pagination')?.remove();
+                return;
+            }
+            
+            let html = '<div style="display:flex;justify-content:center;gap:8px;margin-top:16px;align-items:center;">';
+            html += `<span class="muted">Página ${currentPage + 1} de ${totalPages}</span>`;
+            html += `<button class="btn btn-sm btn-secondary" onclick="loadFacturas(currentBuscar, currentEstado, ${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>← Anterior</button>`;
+            html += `<button class="btn btn-sm btn-secondary" onclick="loadFacturas(currentBuscar, currentEstado, ${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>Siguiente →</button>`;
+            html += '</div>';
+            
+            let pagDiv = document.getElementById('pagination');
+            if (!pagDiv) {
+                pagDiv = document.createElement('div');
+                pagDiv.id = 'pagination';
+                document.querySelector('#facturas-tab .card').appendChild(pagDiv);
+            }
+            pagDiv.innerHTML = html;
+        }
+
+        async function filtrarFacturas() {
+            const estado = document.getElementById('filtro-estado').value;
+            loadFacturas(currentBuscar, estado, 0);
+        }
+
+        async function marcarPagada(id) {
+            try {
+                await api(`/api/facturas/${id}/estado?estado=pagada`, { method: 'PATCH' });
+                showNotice('✓ Factura marcada como cobrada', false, 'global-notice', true);
+                filtrarFacturas();
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        async function editarFactura(id) {
+            const factura = facturasCache.find(f => f.id === id);
+            if (!factura) {
+                showNotice('❌ Factura no encontrada', true);
+                return;
+            }
+            document.getElementById('edit-factura-id').value = id;
+            document.getElementById('edit-base').value = factura.base_imponible;
+            document.getElementById('edit-iva').value = factura.iva_pct;
+            document.getElementById('edit-irpf').value = factura.irpf_pct;
+            document.getElementById('edit-estado').value = factura.estado || 'pendiente';
+            document.getElementById('edit-factura-modal').classList.add('active');
+            calcularEditPreview();
+        }
+
+        function calcularEditPreview() {
+            const base = parseFloat(document.getElementById('edit-base').value) || 0;
+            const ivaPct = parseFloat(document.getElementById('edit-iva').value) || 0;
+            const irpfPct = parseFloat(document.getElementById('edit-irpf').value) || 0;
+            const iva = base * ivaPct / 100;
+            const irpf = base * irpfPct / 100;
+            const total = base + iva - irpf;
+            document.getElementById('edit-preview').innerHTML = `
+                <div style="display:flex;justify-content:space-between;"><span>Base:</span><span>${base.toFixed(2)} €</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>IVA:</span><span>${iva.toFixed(2)} €</span></div>
+                <div style="display:flex;justify-content:space-between;"><span>IRPF:</span><span>-${irpf.toFixed(2)} €</span></div>
+                <div style="display:flex;justify-content:space-between;font-weight:bold;border-top:1px solid #ccc;padding-top:4px;"><span>Total:</span><span>${total.toFixed(2)} €</span></div>
+            `;
+        }
+
+        async function guardarEdicion() {
+            const id = document.getElementById('edit-factura-id').value;
+            const base = parseFloat(document.getElementById('edit-base').value);
+            const iva = parseFloat(document.getElementById('edit-iva').value);
+            const irpf = parseFloat(document.getElementById('edit-irpf').value);
+            const estado = document.getElementById('edit-estado').value;
+            try {
+                await api(`/api/facturas/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ base_imponible: base, iva_pct: iva, irpf_pct: irpf, estado: estado })
+                });
+                document.getElementById('edit-factura-modal').classList.remove('active');
+                showNotice('✓ Factura actualizada', false, 'global-notice', true);
+                filtrarFacturas();
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        function renderChart(facturas) {
+            const chartSection = document.getElementById('chart-section');
+            const year = new Date().getFullYear();
+            const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+            const monthly = {};
+            meses.forEach((_, i) => monthly[i] = 0);
+            
+            facturas.forEach(f => {
+                if (f.fecha_emision) {
+                    const d = new Date(f.fecha_emision);
+                    if (d.getFullYear() === year) {
+                        monthly[d.getMonth()] += f.total || 0;
+                    }
+                }
+            });
+            
+            const maxVal = Math.max(...Object.values(monthly), 1);
+            chartSection.style.display = 'block';
+            document.getElementById('chart-year').textContent = year;
+            
+            const chartHtml = meses.map((mes, i) => {
+                const val = monthly[i];
+                const height = (val / maxVal) * 100;
+                return `<div class="bar" style="height:${height}%" title="${mes}: ${val.toFixed(2)} €"><span class="bar-label">${mes}</span>${val > 0 ? `<span class="bar-value">${(val/1000).toFixed(1)}k</span>` : ''}</div>`;
+            }).join('');
+            
+            document.getElementById('bar-chart').innerHTML = chartHtml;
+        }
+
+        function buscarFacturas(texto) {
+            const estado = document.getElementById('filtro-estado').value;
+            loadFacturas(texto, estado);
+        }
+
+        async function loadConfig() {
+            try {
+                const data = await api('/api/config');
+                document.getElementById('emisor_nif').value = data.nif || '';
+                document.getElementById('emisor_nombre').value = data.nombre || '';
+                document.getElementById('emisor_domicilio').value = data.domicilio || '';
+                document.getElementById('emisor_cp').value = data.cp || '';
+                document.getElementById('emisor_poblacion').value = data.poblacion || '';
+                document.getElementById('emisor_provincia').value = data.provincia || '';
+                document.getElementById('contabilidad_email').value = data.contabilidad_email || '';
+                document.getElementById('asesor_email').value = data.asesor_email || '';
+                document.getElementById('telefonos_autorizados').value = data.telefonos_autorizados || '';
+            } catch (error) {
+                showNotice(error.message, true);
+            }
+        }
+
+        async function sendFacturaEmail(id) {
+            const factura = facturasCache.find(f => f.id === id);
+            const defaultEmail = factura?.cliente_email || '';
+            const email = prompt('Email del cliente', defaultEmail);
+            if (email === null) return;
+            try {
+                const data = await api(`/api/facturas/${id}/enviar-email?email=${encodeURIComponent(email)}`);
+                showNotice(`✓ Factura enviada a ${data.to}`, false, 'global-notice', true);
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        async function shareFacturaWhatsapp(id) {
+            const factura = facturasCache.find(f => f.id === id);
+            const defaultPhone = factura?.cliente_telefono || '';
+            const telefono = prompt('Teléfono para WhatsApp', defaultPhone);
+            if (telefono === null) return;
+            try {
+                const data = await api(`/api/facturas/${id}/whatsapp-link?telefono=${encodeURIComponent(telefono)}`);
+                window.open(data.share_url, '_blank', 'noopener,noreferrer');
+                showNotice(`✓ Enlace abierto para ${data.to}`, false, 'global-notice', true);
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        async function sendInformeContabilidad() {
+            clearNotice('report-result');
+            const year = document.getElementById('report-year').value;
+            const month = document.getElementById('report-month').value;
+            const email = document.getElementById('report-email').value;
+            const advisorEmail = document.getElementById('advisor-email').value;
+            const params = new URLSearchParams();
+            if (year) params.set('anno', year);
+            if (month) params.set('mes', month);
+            if (email) params.set('email', email);
+            if (advisorEmail) params.set('asesor_email', advisorEmail);
+            try {
+                const data = await api(`/api/facturas/informes/contabilidad?${params.toString()}`, { method: 'POST' });
+                const result = data.result || {};
+                showNotice(
+                    `✓ Informe enviado a ${result.accounting || 'contabilidad'}${result.advisor ? ' y copia al asesor' : ''}.`,
+                    false,
+                    'report-result',
+                    true
+                );
+            } catch (error) {
+                showNotice('❌ ' + error.message, true, 'report-result');
+            }
+        }
+
+        async function exportarFacturas(formato) {
+            try {
+                const anno = new Date().getFullYear();
+                const response = await fetch(`/api/facturas/exportar?anno=${anno}&formato=${formato}`);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `facturas_${anno}.${formato}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                showNotice(`✓ Descargado facturas_${anno}.${formato}`, false, 'global-notice', true);
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        // Modal functions
+        function openNewFacturaModal() {
+            document.getElementById('new-factura-modal').classList.add('active');
+            document.getElementById('cliente_nombre').focus();
+        }
+
+        function closeNewFacturaModal() {
+            document.getElementById('new-factura-modal').classList.remove('active');
+            document.getElementById('new-factura-form').reset();
+            calcularPreview();
+            clearNotice('factura-form-notice');
+        }
+
+        document.getElementById('new-factura-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const payload = {
+                cliente_nombre: document.getElementById('cliente_nombre').value,
+                cliente_nif: document.getElementById('cliente_nif').value || null,
+                cliente_email: document.getElementById('cliente_email').value || null,
+                cliente_telefono: document.getElementById('cliente_telefono').value || null,
+                concepto: document.getElementById('factura_concepto').value,
+                base_imponible: parseFloat(document.getElementById('factura_base').value),
+                iva_pct: parseFloat(document.getElementById('factura_iva').value),
+                irpf_pct: parseFloat(document.getElementById('factura_irpf').value),
+                estado: document.getElementById('factura_estado').value,
+            };
+            
+            // Validar NIF si supera 400€
+            const base = payload.base_imponible;
+            const iva = base * payload.iva_pct / 100;
+            const totalConIva = base + iva;
+            
+            if (totalConIva > 400 && !payload.cliente_nif) {
+                showNotice('⚠️ Para facturas mayores de 400€ necesitas indicar el NIF del cliente.', true, 'factura-form-notice');
+                return;
+            }
+            
+            try {
+                const factura = await api('/api/facturas/simple', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                showNotice('✓ Factura creada correctamente', false, 'factura-form-notice', true);
+                setTimeout(() => {
+                    closeNewFacturaModal();
+                    loadFacturas();
+                }, 1500);
+            } catch (error) {
+                showNotice('❌ ' + error.message, true, 'factura-form-notice');
+            }
+        });
+
+        document.getElementById('config-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const payload = {
+                nif: document.getElementById('emisor_nif').value,
+                nombre: document.getElementById('emisor_nombre').value,
+                domicilio: document.getElementById('emisor_domicilio').value,
+                cp: document.getElementById('emisor_cp').value,
+                poblacion: document.getElementById('emisor_poblacion').value,
+                provincia: document.getElementById('emisor_provincia').value,
+                contabilidad_email: document.getElementById('contabilidad_email').value,
+                asesor_email: document.getElementById('asesor_email').value,
+                telefonos_autorizados: document.getElementById('telefonos_autorizados').value,
+            };
+            try {
+                await api('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                showNotice('✓ Datos guardados correctamente', false, 'global-notice', true);
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        });
+
+        loadFacturas();
+    </script>
+</body>
+</html>

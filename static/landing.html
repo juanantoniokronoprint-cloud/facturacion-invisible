@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facturación Invisible - Factura desde WhatsApp con IA</title>
+    <meta name="description" content="Sistema de facturación automática para autónomos. Crea facturas enviando un mensaje por WhatsApp. Incluye transcripción de voz y VeriFactu.">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="Facturación Invisible - Factura desde WhatsApp">
+    <meta property="og:description" content="Crea facturas enviando un mensaje de WhatsApp. La IA hace el resto.">
+    <meta property="og:type" content="website">
+    
+    <link rel="canonical" href="https://facturacioninvisible.es">
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --primary: #0f766e;
+            --primary-dark: #0d5f59;
+            --secondary: #1e293b;
+            --accent: #f59e0b;
+            --bg: #f8fafc;
+            --white: #ffffff;
+            --text: #1e293b;
+            --text-light: #64748b;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        /* Header */
+        header {
+            background: var(--white);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+        }
+        
+        .logo {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .logo span { color: var(--secondary); }
+        
+        .nav-links {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+        
+        .nav-links a {
+            color: var(--text-light);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        
+        .nav-links a:hover { color: var(--primary); }
+        
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: var(--white);
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+        
+        .btn-outline {
+            border: 2px solid var(--primary);
+            color: var(--primary);
+            background: transparent;
+        }
+        
+        .btn-outline:hover {
+            background: var(--primary);
+            color: var(--white);
+        }
+        
+        /* Hero */
+        .hero {
+            background: linear-gradient(135deg, var(--secondary) 0%, #334155 100%);
+            color: var(--white);
+            padding: 80px 0;
+            text-align: center;
+        }
+        
+        .hero h1 {
+            font-size: clamp(36px, 5vw, 56px);
+            line-height: 1.1;
+            margin-bottom: 24px;
+            font-weight: 800;
+        }
+        
+        .hero h1 span {
+            color: var(--accent);
+        }
+        
+        .hero p {
+            font-size: 20px;
+            color: #cbd5e1;
+            max-width: 600px;
+            margin: 0 auto 32px;
+        }
+        
+        .hero-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .hero .btn {
+            padding: 16px 32px;
+            font-size: 18px;
+        }
+        
+        .whatsapp-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.1);
+            padding: 8px 16px;
+            border-radius: 50px;
+            margin-top: 24px;
+            font-size: 14px;
+        }
+        
+        /* Features */
+        .features {
+            padding: 80px 0;
+            background: var(--white);
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+        
+        .section-title h2 {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        
+        .section-title p {
+            color: var(--text-light);
+            font-size: 18px;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+        }
+        
+        .feature-card {
+            background: var(--bg);
+            padding: 32px;
+            border-radius: 16px;
+            transition: transform 0.2s;
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-4px);
+        }
+        
+        .feature-icon {
+            width: 56px;
+            height: 56px;
+            background: var(--primary);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin-bottom: 16px;
+        }
+        
+        .feature-card h3 {
+            font-size: 20px;
+            margin-bottom: 8px;
+        }
+        
+        .feature-card p {
+            color: var(--text-light);
+        }
+        
+        /* Demo */
+        .demo {
+            padding: 80px 0;
+            background: var(--bg);
+        }
+        
+        .demo-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 48px;
+            align-items: center;
+        }
+        
+        .demo-text h2 {
+            font-size: 32px;
+            margin-bottom: 16px;
+        }
+        
+        .demo-text p {
+            color: var(--text-light);
+            margin-bottom: 24px;
+        }
+        
+        .chat-demo {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        
+        .chat-message {
+            margin-bottom: 16px;
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+        }
+        
+        .chat-user {
+            background: #e0f2fe;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .chat-bot {
+            background: #f1f5f9;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .chat-label {
+            font-size: 12px;
+            color: var(--text-light);
+            margin-bottom: 4px;
+        }
+        
+        /* Pricing */
+        .pricing {
+            padding: 80px 0;
+            background: var(--white);
+        }
+        
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .pricing-card {
+            background: var(--bg);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+            position: relative;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .pricing-card.featured {
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+        
+        .pricing-card.featured::before {
+            content: "Más popular";
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--primary);
+            color: white;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .pricing-card h3 {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .price {
+            font-size: 48px;
+            font-weight: 800;
+            color: var(--primary);
+        }
+        
+        .price span {
+            font-size: 16px;
+            color: var(--text-light);
+            font-weight: 400;
+        }
+        
+        .pricing-features {
+            list-style: none;
+            margin: 24px 0;
+            text-align: left;
+        }
+        
+        .pricing-features li {
+            padding: 8px 0;
+            color: var(--text-light);
+        }
+        
+        .pricing-features li::before {
+            content: "✓";
+            color: var(--primary);
+            margin-right: 8px;
+            font-weight: 600;
+        }
+        
+        /* CTA */
+        .cta {
+            padding: 80px 0;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            text-align: center;
+        }
+        
+        .cta h2 {
+            font-size: 36px;
+            margin-bottom: 16px;
+        }
+        
+        .cta p {
+            font-size: 18px;
+            opacity: 0.9;
+            margin-bottom: 32px;
+        }
+        
+        .cta .btn {
+            background: white;
+            color: var(--primary);
+            font-size: 18px;
+            padding: 16px 40px;
+        }
+        
+        .cta .btn:hover {
+            transform: scale(1.05);
+        }
+        
+        /* Footer */
+        footer {
+            background: var(--secondary);
+            color: #94a3b8;
+            padding: 40px 0;
+            text-align: center;
+        }
+        
+        footer a {
+            color: white;
+            text-decoration: none;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .demo-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .pricing-card.featured {
+                transform: none;
+            }
+            
+            .hero h1 {
+                font-size: 32px;
+            }
+            
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container header-content">
+            <a href="#" class="logo">Facturación<span>Invisible</span></a>
+            <nav class="nav-links">
+                <a href="#funcionalidades">Funcionalidades</a>
+                <a href="#como-funciona">Cómo funciona</a>
+                <a href="#precios">Precios</a>
+                <a href="#contacto" class="btn btn-primary">Empezar gratis</a>
+            </nav>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <h1>Crea facturas desde <span>WhatsApp</span> con IA</h1>
+            <p>El sistema de facturación más fácil para autónomos. Envía un mensaje de voz o texto y la IA genera la factura, el PDF y lo envía al cliente automáticamente.</p>
+            <div class="hero-buttons">
+                <a href="#contacto" class="btn btn-primary">Empezar gratis</a>
+                <a href="#demo" class="btn btn-outline" style="border-color: white; color: white;">Ver demo</a>
+            </div>
+            <div class="whatsapp-badge">
+                📱 Envía "Cobré 200€ de Juan por fontanería" y la factura está creada
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="funcionalidades">
+        <div class="container">
+            <div class="section-title">
+                <h2>¿Por qué Facturación Invisible?</h2>
+                <p>La forma más rápida de facturar para autónomos y asesorías</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">🎙️</div>
+                    <h3>Voz a factura</h3>
+                    <p>Envía un mensaje de voz describiendo el servicio. La IA transcribe y crea la factura automáticamente.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📄</div>
+                    <h3>PDF automático</h3>
+                    <p>Genera facturas profesionales en PDF con todos los datos requeridos por Hacienda.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">📧</div>
+                    <h3>Envío automático</h3>
+                    <p>Envía la factura al cliente por email y WhatsApp sin hacer nada más.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🏛️</div>
+                    <h3>VeriFactu listo</h3>
+                    <p>Preparado para el sistema de factura electrónica de la AEAT. Cumple con la normativa.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">💰</div>
+                    <h3>Muy económico</h3>
+                    <p>Desde 14.99€/mes. Sin costes ocultos. Incluye todo lo que necesitas.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">🔒</div>
+                    <h3>Seguridad total</h3>
+                    <p>Tus datos están protegidos. Cumplimiento RGPD y normativa española.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="demo" id="como-funciona">
+        <div class="container">
+            <div class="demo-content">
+                <div class="demo-text">
+                    <h2>Así de fácil</h2>
+                    <p>No necesitas aprender nada nuevo. Solo envías un mensaje como harías con cualquier cliente.</p>
+                    <a href="#contacto" class="btn btn-primary">Probar gratis</a>
+                </div>
+                <div class="chat-demo">
+                    <div class="chat-message chat-user">
+                        <div class="chat-label">Tú</div>
+                        Cobré 200 euros de María García por servicio de fontanería
+                    </div>
+                    <div class="chat-message chat-bot">
+                        <div class="chat-label">Facturación Invisible</div>
+                        📋 Datos extraídos:<br><br>
+                        👤 Cliente: María García<br>
+                        💰 Importe: 200€ (21% IVA)<br>
+                        📝 Servicio: Fontanería<br>
+                        <br>
+                        ✅ Factura FI-123 creada<br>
+                        📧 Enviada al cliente
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="pricing" id="precios">
+        <div class="container">
+            <div class="section-title">
+                <h2>Un solo plan, todo incluido</h2>
+                <p>Sin permanencias. Empieza y para cuando quieras.</p>
+            </div>
+            <div style="max-width: 600px; margin: 0 auto;">
+                <div class="pricing-card featured" style="transform: none;">
+                    <h3>Profesional</h3>
+                    <div class="price">14.99€<span>/mes</span></div>
+                    <ul class="pricing-features">
+                        <li>Facturación ilimitada</li>
+                        <li>PDF profesional con VeriFactu</li>
+                        <li>Envío por email y WhatsApp</li>
+                        <li>Mensajes de voz con IA</li>
+                        <li>Copia automática al asesor</li>
+                        <li>Informe para contabilidad</li>
+                        <li>Portal de cliente</li>
+                        <li>Soporte prioritario</li>
+                    </ul>
+                    <a href="#contacto" class="btn btn-primary" style="width: 100%;">Empezar gratis</a>
+                </div>
+                <div style="text-align: center; margin-top: 24px; padding: 20px; background: #f1f5f9; border-radius: 12px;">
+                    <p style="font-weight: 600; margin-bottom: 8px;">¿Necesitas más números?</p>
+                    <p style="color: var(--text-light); font-size: 14px;">Añade números adicionales de WhatsApp por <strong>2.90€/mes</strong> cada uno.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta" id="contacto">
+        <div class="container">
+            <h2>Empieza a facturar en 2 minutos</h2>
+            <p>Sin compromiso. Pruebalo gratis durante 14 días.</p>
+            <a href="mailto:info@facturacioninvisible.es" class="btn">Solicitar prueba gratis</a>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>© 2026 Facturación Invisible. Todos los derechos reservados.</p>
+            <p style="margin-top: 8px; font-size: 14px;">
+                <a href="#">Política de privacidad</a> | <a href="#">Términos</a> | <a href="#">Contacto</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- WhatsApp float -->
+    <a href="https://wa.me/34686981404" style="position: fixed; bottom: 20px; right: 20px; background: #25d366; color: white; width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); text-decoration: none;" target="_blank">💬</a>
+</body>
+</html>
