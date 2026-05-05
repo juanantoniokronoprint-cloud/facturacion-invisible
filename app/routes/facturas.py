@@ -3,38 +3,40 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.config import ASESOR_EMAIL, CONTABILIDAD_EMAIL
 from app.models.models import Cliente, Factura, LineaFactura, get_db
-from app.services.document_service import ensure_factura_pdf, factura_pdf_public_url
+from app.services.calculadora_fiscal import calcular_factura as calcular_totales_factura
+from app.services.document_service import factura_pdf_path, ensure_factura_pdf, factura_pdf_public_url
 from app.services.email_service import (
     send_accounting_pack,
     send_factura_copy_to_advisor,
     send_factura_to_client,
 )
 from app.services.whatsapp_sender import enviar_pdf_whatsapp
+from app.services.auth import get_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_api_key)])
 
 
 class LineaFacturaCreate(BaseModel):
-    descripcion: str
-    cantidad: float = 1
-    precio_unitario: float
-    descuento_pct: float = 0
-    iva_pct: float = 21
+    descripcion: str = Field(..., min_length=1, max_length=500)
+    cantidad: float = Field(default=1, gt=0)
+    precio_unitario: float = Field(..., ge=0)
+    descuento_pct: float = Field(default=0, ge=0, le=100)
+    iva_pct: float = Field(default=21, ge=0, le=100)
 
 
 class FacturaCreate(BaseModel):
-    cliente_id: int
+    cliente_id: int = Field(..., gt=0)
     fecha_operacion: Optional[datetime] = None
-    base_imponible: float
-    iva_pct: float = 21
-    irpf_pct: float = 0
-    estado: str = "pendiente"
-    lineas: list[LineaFacturaCreate] = []
+    base_imponible: Optional[float] = Field(default=None, gt=0)
+    iva_pct: float = Field(default=21, ge=0, le=100)
+    irpf_pct: Optional[float] = Field(default=0, ge=0, le=100)
+    estado: str = Field(default="pendiente", pattern="^(borrador|pendiente|emitida|pagada|cancelada)$")
+    lineas: list[LineaFacturaCreate] = Field(default_factory=list)
 
 
 class ClienteCreate(BaseModel):
@@ -45,7 +47,7 @@ class ClienteCreate(BaseModel):
     codigo_postal: Optional[str] = None
     ciudad: Optional[str] = None
     provincia: Optional[str] = None
-    email: Optional[str] = None
+    email: Optional[str] = Field(default=None, max_length=200)
     telefono: Optional[str] = None
 
 
@@ -55,11 +57,41 @@ class FacturaSimpleCreate(BaseModel):
     cliente_email: Optional[str] = None
     cliente_telefono: Optional[str] = None
     cliente_domicilio: Optional[str] = None
-    concepto: str
-    base_imponible: float
-    iva_pct: float = 21
-    irpf_pct: float = 0
-    estado: str = "pendiente"
+    concepto: str = Field(..., min_length=1, max_length=500)
+    base_imponible: float = Field(..., gt=0)
+    iva_pct: float = Field(default=21, ge=0, le=100)
+    irpf_pct: Optional[float] = Field(default=0, ge=0, le=100)
+    estado: str = Field(default="pendiente", pattern="^(borrador|pendiente|emitida|pagada|cancelada)$")
+
+    @field_validator("cliente_email")
+    @classmethod
+    def normalize_email(cls, value: Optional[str]) -> Optional[str]:
+        return value.strip().lower() if value else value
+
+
+class FacturaUpdate(BaseModel):
+    base_imponible: Optional[float] = Field(default=None, gt=0)
+    iva_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    irpf_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    estado: Optional[str] = Field(default=None, pattern="^(borrador|pendiente|emitida|pagada|cancelada)$")
+
+
+class AbonoCreate(BaseModel):
+    base_imponible: float = Field(..., gt=0, description="Importe base a abonar en positivo")
+    iva_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    irpf_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    concepto: str = Field(default="Abono de factura", min_length=1, max_length=500)
+    motivo: str = Field(default="Abono/devolución", min_length=1, max_length=500)
+
+
+class RectificativaCreate(BaseModel):
+    tipo_factura: str = Field(default="R1", pattern="^R[1-5]$")
+    tipo_rectificacion: str = Field(default="I", pattern="^[SI]$")
+    base_imponible: float = Field(..., description="Base de la rectificativa: diferencia con signo o nueva base si es sustitución")
+    iva_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    irpf_pct: Optional[float] = Field(default=None, ge=0, le=100)
+    concepto: str = Field(default="Factura rectificativa", min_length=1, max_length=500)
+    motivo: str = Field(..., min_length=1, max_length=500)
 
 
 def _get_factura_or_404(db: Session, factura_id: int) -> Factura:
@@ -76,14 +108,31 @@ def _get_cliente_or_404(db: Session, cliente_id: int) -> Cliente:
     return cliente
 
 
+def _serialize_cliente(cliente: Cliente, updated: Optional[bool] = None) -> dict:
+    data = {
+        "id": cliente.id,
+        "nif": cliente.nif,
+        "nombre": cliente.nombre,
+        "razon_social": cliente.razon_social,
+        "domicilio": cliente.domicilio,
+        "codigo_postal": cliente.codigo_postal,
+        "ciudad": cliente.ciudad,
+        "provincia": cliente.provincia,
+        "email": cliente.email,
+        "telefono": cliente.telefono,
+    }
+    if updated is not None:
+        data["updated"] = updated
+    return data
+
+
 def _serialize_factura(db: Session, factura: Factura) -> dict:
     cliente = factura.cliente or db.query(Cliente).filter(Cliente.id == factura.cliente_id).first()
 
-    pdf_path = factura.pdf_path
+    expected_pdf_path = str(factura_pdf_path(factura))
+    pdf_exists = factura_pdf_path(factura).exists()
+    pdf_path = factura.pdf_path or (expected_pdf_path if pdf_exists else None)
     pdf_url = factura_pdf_public_url(factura.id) if cliente else None
-    if cliente:
-        pdf_path = ensure_factura_pdf(db, factura, cliente)
-        pdf_url = factura_pdf_public_url(factura.id)
 
     return {
         "id": factura.id,
@@ -103,38 +152,125 @@ def _serialize_factura(db: Session, factura: Factura) -> dict:
         "irpf_cuota": factura.irpf_cuota,
         "total": factura.total,
         "estado": factura.estado,
+        "tipo_factura": factura.tipo_factura or "F1",
+        "tipo_rectificacion": factura.tipo_rectificacion,
+        "motivo_rectificacion": factura.motivo_rectificacion,
+        "factura_origen_id": factura.factura_origen_id,
+        "factura_origen": (
+            f"{factura.factura_origen.serie}-{factura.factura_origen.numero}"
+            if getattr(factura, "factura_origen", None)
+            else None
+        ),
         "pdf_path": pdf_path,
         "pdf_url": pdf_url,
+        "pdf_exists": pdf_exists,
         "verifactu_enviada": factura.verifactu_enviada,
         "verifactu_fecha": factura.verifactu_fecha.isoformat() if factura.verifactu_fecha else None,
     }
 
 
 def _next_invoice_number(db: Session, serie: str) -> str:
-    ultimo = (
-        db.query(Factura)
-        .filter(Factura.serie == serie)
-        .order_by(Factura.anno.desc(), Factura.id.desc())
-        .first()
+    anno = datetime.utcnow().year
+    numeros = [
+        int(factura.numero)
+        for factura in db.query(Factura.numero).filter(Factura.serie == serie, Factura.anno == anno).all()
+        if str(factura.numero or "").isdigit()
+    ]
+    return str((max(numeros) if numeros else 0) + 1)
+
+
+def _validate_nif_required(cliente_nif: Optional[str], base: float, iva_pct: float) -> None:
+    total_con_iva = round(float(base) + (float(base) * float(iva_pct) / 100), 2)
+    if total_con_iva > 400 and not (cliente_nif or "").strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Para facturas superiores a 400€ con IVA incluido es obligatorio indicar el NIF del cliente",
+        )
+
+
+def _crear_factura_derivada(
+    db: Session,
+    factura_origen: Factura,
+    *,
+    serie: str,
+    tipo_factura: str,
+    tipo_rectificacion: Optional[str],
+    base_imponible: float,
+    iva_pct: Optional[float],
+    irpf_pct: Optional[float],
+    concepto: str,
+    motivo: str,
+) -> Factura:
+    if (factura_origen.tipo_factura or "").startswith("R") or factura_origen.serie in {"AB", "FR"}:
+        raise HTTPException(status_code=400, detail="No se puede rectificar un abono o una rectificativa")
+
+    cliente = factura_origen.cliente or _get_cliente_or_404(db, factura_origen.cliente_id)
+    iva_pct_final = float(factura_origen.iva_pct if iva_pct is None else iva_pct)
+    irpf_pct_final = float(factura_origen.irpf_pct if irpf_pct is None else irpf_pct)
+    base = round(float(base_imponible), 2)
+    iva_cuota = round(base * iva_pct_final / 100, 2)
+    irpf_cuota = round(base * irpf_pct_final / 100, 2)
+    total = round(base + iva_cuota - irpf_cuota, 2)
+
+    factura = Factura(
+        numero=_next_invoice_number(db, serie),
+        serie=serie,
+        cliente_id=cliente.id,
+        fecha_emision=datetime.utcnow(),
+        fecha_operacion=datetime.utcnow(),
+        base_imponible=base,
+        iva_pct=iva_pct_final,
+        iva_cuota=iva_cuota,
+        irpf_pct=irpf_pct_final,
+        irpf_cuota=irpf_cuota,
+        total=total,
+        estado="pendiente",
+        tipo_factura=tipo_factura,
+        tipo_rectificacion=tipo_rectificacion,
+        motivo_rectificacion=motivo,
+        factura_origen_id=factura_origen.id,
     )
-    if not ultimo or not ultimo.numero:
-        return "1"
-    try:
-        return str(int(ultimo.numero) + 1)
-    except ValueError:
-        return str(ultimo.id + 1)
+    db.add(factura)
+    db.flush()
+    db.add(
+        LineaFactura(
+            factura_id=factura.id,
+            numero_linea=1,
+            descripcion=concepto,
+            cantidad=1,
+            precio_unitario=base,
+            descuento_pct=0,
+            base_imponible=base,
+            iva_pct=iva_pct_final,
+            iva_cuota=iva_cuota,
+            total=total,
+        )
+    )
+    db.commit()
+    db.refresh(factura)
+    return factura
 
 
 @router.post("/")
 def crear_factura(payload: FacturaCreate, db: Session = Depends(get_db)):
     cliente = _get_cliente_or_404(db, payload.cliente_id)
 
-    base = float(payload.base_imponible)
+    if payload.lineas:
+        calculo = calcular_totales_factura(payload.lineas, irpf_pct=payload.irpf_pct or 0, iva_pct=payload.iva_pct)
+        base = calculo.base_imponible
+        iva_cuota = calculo.iva_cuota
+        irpf_cuota = calculo.irpf_cuota
+        total = calculo.total
+    elif payload.base_imponible is not None:
+        base = float(payload.base_imponible)
+        iva_cuota = round(base * payload.iva_pct / 100, 2)
+        irpf_cuota = round(base * (payload.irpf_pct or 0) / 100, 2)
+        total = round(base + iva_cuota - irpf_cuota, 2)
+    else:
+        raise HTTPException(status_code=422, detail="Indica lineas o base_imponible")
     iva_pct = float(payload.iva_pct)
-    irpf_pct = float(payload.irpf_pct)
-    iva_cuota = round(base * iva_pct / 100, 2)
-    irpf_cuota = round(base * irpf_pct / 100, 2)
-    total = round(base + iva_cuota - irpf_cuota, 2)
+    irpf_pct = float(payload.irpf_pct or 0)
+    _validate_nif_required(cliente.nif, base, iva_pct)
 
     factura = Factura(
         numero=_next_invoice_number(db, "FI"),
@@ -149,6 +285,7 @@ def crear_factura(payload: FacturaCreate, db: Session = Depends(get_db)):
         irpf_cuota=irpf_cuota,
         total=total,
         estado=payload.estado,
+        tipo_factura="F1" if cliente.nif else "F2",
     )
     db.add(factura)
     db.flush()
@@ -180,7 +317,7 @@ def crear_factura(payload: FacturaCreate, db: Session = Depends(get_db)):
 @router.get("/")
 def listar_facturas(
     skip: int = 0, 
-    limit: int = 20, 
+    limit: int = Query(default=20, ge=1, le=100),
     buscar: Optional[str] = Query(default=None, description="Buscar por cliente o número"),
     estado: Optional[str] = Query(default=None, description="Filtrar por estado"),
     db: Session = Depends(get_db)
@@ -213,7 +350,7 @@ def crear_cliente(payload: ClienteCreate, db: Session = Depends(get_db)):
     if payload.nif:
         existing = db.query(Cliente).filter(Cliente.nif == payload.nif).first()
     if existing:
-        return {"id": existing.id, "nombre": existing.nombre, "updated": False}
+        return _serialize_cliente(existing, updated=False)
     
     cliente = Cliente(
         nif=payload.nif,
@@ -229,7 +366,7 @@ def crear_cliente(payload: ClienteCreate, db: Session = Depends(get_db)):
     db.add(cliente)
     db.commit()
     db.refresh(cliente)
-    return {"id": cliente.id, "nombre": cliente.nombre, "updated": True}
+    return _serialize_cliente(cliente, updated=True)
 
 
 @router.get("/clientes")
@@ -238,7 +375,7 @@ def listar_clientes(buscar: Optional[str] = Query(default=None), db: Session = D
     if buscar:
         query = query.filter(Cliente.nombre.ilike(f"%{buscar}%"))
     clientes = query.order_by(Cliente.nombre).limit(50).all()
-    return [{"id": c.id, "nif": c.nif, "nombre": c.nombre, "email": c.email, "telefono": c.telefono} for c in clientes]
+    return [_serialize_cliente(c) for c in clientes]
 
 
 @router.post("/simple")
@@ -263,7 +400,8 @@ def crear_factura_simple(payload: FacturaSimpleCreate, db: Session = Depends(get
     
     base = float(payload.base_imponible)
     iva_pct = float(payload.iva_pct)
-    irpf_pct = float(payload.irpf_pct)
+    irpf_pct = float(payload.irpf_pct or 0)
+    _validate_nif_required(cliente.nif, base, iva_pct)
     iva_cuota = round(base * iva_pct / 100, 2)
     irpf_cuota = round(base * irpf_pct / 100, 2)
     total = round(base + iva_cuota - irpf_cuota, 2)
@@ -281,6 +419,7 @@ def crear_factura_simple(payload: FacturaSimpleCreate, db: Session = Depends(get
         irpf_cuota=irpf_cuota,
         total=total,
         estado=payload.estado,
+        tipo_factura="F1" if cliente.nif else "F2",
     )
     db.add(factura)
     db.flush()
@@ -355,7 +494,7 @@ def obtener_factura(factura_id: int, db: Session = Depends(get_db)):
 @router.patch("/{factura_id}/estado")
 def actualizar_estado_factura(
     factura_id: int,
-    estado: str = Query(..., description="Nuevo estado"),
+    estado: str = Query(..., pattern="^(borrador|pendiente|emitida|pagada|cancelada)$", description="Nuevo estado"),
     db: Session = Depends(get_db)
 ):
     factura = _get_factura_or_404(db, factura_id)
@@ -366,24 +505,17 @@ def actualizar_estado_factura(
 
 
 @router.put("/{factura_id}")
-def actualizar_factura(
-    factura_id: int,
-    base_imponible: Optional[float] = None,
-    iva_pct: Optional[float] = None,
-    irpf_pct: Optional[float] = None,
-    estado: Optional[str] = None,
-    db: Session = Depends(get_db)
-):
+def actualizar_factura(factura_id: int, payload: FacturaUpdate, db: Session = Depends(get_db)):
     factura = _get_factura_or_404(db, factura_id)
     
-    if base_imponible is not None:
-        factura.base_imponible = base_imponible
-    if iva_pct is not None:
-        factura.iva_pct = iva_pct
-    if irpf_pct is not None:
-        factura.irpf_pct = irpf_pct
-    if estado is not None:
-        factura.estado = estado
+    if payload.base_imponible is not None:
+        factura.base_imponible = payload.base_imponible
+    if payload.iva_pct is not None:
+        factura.iva_pct = payload.iva_pct
+    if payload.irpf_pct is not None:
+        factura.irpf_pct = payload.irpf_pct
+    if payload.estado is not None:
+        factura.estado = payload.estado
     
     # Recalcular totales
     factura.iva_cuota = round(factura.base_imponible * factura.iva_pct / 100, 2)
@@ -393,6 +525,42 @@ def actualizar_factura(
     db.commit()
     db.refresh(factura)
     return _serialize_factura(db, factura)
+
+
+@router.post("/{factura_id}/abono")
+def crear_abono_factura(factura_id: int, payload: AbonoCreate, db: Session = Depends(get_db)):
+    factura_origen = _get_factura_or_404(db, factura_id)
+    factura = _crear_factura_derivada(
+        db,
+        factura_origen,
+        serie="AB",
+        tipo_factura="R1",
+        tipo_rectificacion="I",
+        base_imponible=-abs(payload.base_imponible),
+        iva_pct=payload.iva_pct,
+        irpf_pct=payload.irpf_pct,
+        concepto=payload.concepto,
+        motivo=payload.motivo,
+    )
+    return {"ok": True, "factura": _serialize_factura(db, factura)}
+
+
+@router.post("/{factura_id}/rectificativa")
+def crear_rectificativa_factura(factura_id: int, payload: RectificativaCreate, db: Session = Depends(get_db)):
+    factura_origen = _get_factura_or_404(db, factura_id)
+    factura = _crear_factura_derivada(
+        db,
+        factura_origen,
+        serie="FR",
+        tipo_factura=payload.tipo_factura,
+        tipo_rectificacion=payload.tipo_rectificacion,
+        base_imponible=payload.base_imponible,
+        iva_pct=payload.iva_pct,
+        irpf_pct=payload.irpf_pct,
+        concepto=payload.concepto,
+        motivo=payload.motivo,
+    )
+    return {"ok": True, "factura": _serialize_factura(db, factura)}
 
 
 @router.get("/{factura_id}/pdf")

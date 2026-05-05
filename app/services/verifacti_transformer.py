@@ -136,8 +136,8 @@ class VeriFactiTransformer:
         factura: Dict[str, Any],
         cliente: Dict[str, Any],
         lineas: List[Dict[str, Any]],
-        tipo_rectificativa: str,  # R1, R2, R3, R4, R5
-        tipo: str,  # S (sustitución) o I (diferencia)
+        tipo_rectificativa: str = "R1",  # R1, R2, R3, R4, R5
+        tipo: str = "I",  # S (sustitución) o I (diferencia)
         factura_original: Optional[Dict[str, Any]] = None,
         motivo: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -202,7 +202,7 @@ class VeriFactiTransformer:
         factura: Dict[str, Any],
         cliente: Dict[str, Any],
         lineas: List[Dict[str, Any]],
-        facturas_sustituidas: List[Dict[str, Any]]
+        facturas_sustituidas: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Transforma una factura F3 (sustitución de facturas simplificadas)
@@ -224,7 +224,7 @@ class VeriFactiTransformer:
         
         # Añadir facturas sustituidas
         verifacti_data["facturas_sustituidas"] = []
-        for fact_sust in facturas_sustituidas:
+        for fact_sust in facturas_sustituidas or []:
             try:
                 fecha_sust = datetime.strptime(fact_sust['fecha'], '%Y-%m-%d').strftime('%d-%m-%Y')
                 verifacti_data["facturas_sustituidas"].append({
@@ -265,7 +265,7 @@ class VeriFactiTransformer:
         for linea in lineas:
             # Extraer datos de la línea (soportar múltiples formatos)
             cantidad = float(linea.get('cantidad') or linea.get('NCANENT') or linea.get('NCANPED') or 0)
-            precio = float(linea.get('precio') or linea.get('NPREUNIT') or 0)
+            precio = float(linea.get('precio') or linea.get('precio_unitario') or linea.get('NPREUNIT') or 0)
             descuento = float(linea.get('dto_pct') or linea.get('NDTO') or 0)
             iva_pct = float(linea.get('iva_pct') or linea.get('NIVA') or linea.get('IVA') or 21.0)
             
@@ -388,38 +388,121 @@ class VeriFactiTransformer:
             desc += f" con {len(lineas)} líneas"
         
         return desc[:500]  # Máximo 500 caracteres
-    
-    @staticmethod
-    def validar_nif_formato(nif: str) -> bool:
-        """
-        Valida formato básico de NIF español
-        Regla 3ª RIS - Art. 29 RIS
-        
-        Formatos válidos:
-        - DNI: 8 dígitos + letra (ej: 12345678A)
-        - NIF empresa: letra + 8 dígitos (ej: B12345678)
-        - NIE: letra (X/Y/Z/A-W) + 7 dígitos + letra (ej: X1234567A, A1234567B)
-        """
-        if not nif:
-            return False
-        
-        nif = nif.strip().upper()
-        
-        if len(nif) != 9:
-            return False
-        
-        # DNI: 8 dígitos + letra
-        if nif[:8].isdigit() and nif[8].isalpha():
-            return True
-        
-        # NIF empresa: letra + 8 dígitos (letras A-W)
-        if nif[0].isalpha() and nif[0] in 'ABCDEFGHJNPQRSUVW' and nif[1:].isdigit():
-            return True
-        
-        # NIE: letra inicial (X/Y/Z/A-W) + 7 dígitos + letra
-        # X, Y, Z para residentes; A-W para extranjeros
-        if nif[0] in 'XYZABCDEFGHJNPQRSUVW' and nif[1:8].isdigit() and nif[8].isalpha():
-            return True
-        
+
+
+def transformar_factura_verifactu(factura, cliente, tipo_factura: str = "F1") -> Dict[str, Any]:
+    """Adaptador ORM de Factura Invisible → formato VeriFacti."""
+    factura_dict = {
+        "serie": getattr(factura, "serie", ""),
+        "numero": getattr(factura, "numero", ""),
+        "fecha": getattr(factura, "fecha_emision", None).strftime("%Y-%m-%d")
+        if getattr(factura, "fecha_emision", None)
+        else datetime.now().strftime("%Y-%m-%d"),
+        "fecha_operacion": getattr(factura, "fecha_operacion", None).strftime("%Y-%m-%d")
+        if getattr(factura, "fecha_operacion", None)
+        else None,
+        "tipo_factura": tipo_factura or getattr(factura, "tipo_factura", None) or "F1",
+        "total": getattr(factura, "base_imponible", 0) or 0,
+        "iva_pct": getattr(factura, "iva_pct", 21) or 21,
+        "descripcion": getattr(factura, "motivo_rectificacion", None),
+    }
+    cliente_dict = {
+        "nif": getattr(cliente, "nif", None),
+        "nombre": getattr(cliente, "nombre", None),
+    }
+    lineas = [
+        {
+            "descripcion": linea.descripcion,
+            "cantidad": linea.cantidad,
+            "precio_unitario": linea.precio_unitario,
+            "dto_pct": linea.descuento_pct,
+            "iva_pct": linea.iva_pct,
+        }
+        for linea in getattr(factura, "lineas", []) or []
+    ]
+    if not lineas:
+        lineas = [
+            {
+                "descripcion": factura_dict["descripcion"] or f"Factura {factura_dict['serie']}-{factura_dict['numero']}",
+                "cantidad": 1,
+                "precio_unitario": getattr(factura, "base_imponible", 0) or 0,
+                "iva_pct": getattr(factura, "iva_pct", 21) or 21,
+            }
+        ]
+
+    tipo_rectificacion = getattr(factura, "tipo_rectificacion", None)
+    factura_origen = getattr(factura, "factura_origen", None)
+    if str(factura_dict["tipo_factura"]).startswith("R") and tipo_rectificacion:
+        factura_original = None
+        if factura_origen:
+            factura_original = {
+                "serie": getattr(factura_origen, "serie", ""),
+                "numero": getattr(factura_origen, "numero", ""),
+                "fecha": getattr(factura_origen, "fecha_emision", None).strftime("%Y-%m-%d")
+                if getattr(factura_origen, "fecha_emision", None)
+                else datetime.now().strftime("%Y-%m-%d"),
+                "lineas": [
+                    {
+                        "base": getattr(linea, "base_imponible", 0) or 0,
+                        "iva": getattr(linea, "iva_cuota", 0) or 0,
+                    }
+                    for linea in getattr(factura_origen, "lineas", []) or []
+                ],
+            }
+        return VeriFactiTransformer.transform_rectificativa(
+            factura_dict,
+            cliente_dict,
+            lineas,
+            factura_dict["tipo_factura"],
+            tipo_rectificacion,
+            factura_original=factura_original,
+            motivo=getattr(factura, "motivo_rectificacion", None),
+        )
+
+    return VeriFactiTransformer.transform_factura(factura_dict, cliente_dict, lineas)
+
+
+def transformar_factura_verifacti(factura, cliente=None, tipo_factura: str = "F1") -> Dict[str, Any]:
+    """Alias compatible para pruebas/integraciones antiguas."""
+    if cliente is None:
+        cliente = getattr(factura, "cliente", None)
+    data = transformar_factura_verifactu(factura, cliente, tipo_factura)
+    data.setdefault("numeroFactura", f"{data.get('serie', '')}-{data.get('numero', '')}".strip("-"))
+    return data
+
+
+def transformar_rectificativa_verifacti(factura, cliente=None, tipo_factura: Optional[str] = None) -> Dict[str, Any]:
+    """Alias compatible para rectificativas antiguas."""
+    tipo = tipo_factura or getattr(factura, "tipo_factura", None) or "R1"
+    if cliente is None:
+        cliente = getattr(factura, "cliente", None)
+    data = transformar_factura_verifactu(factura, cliente, tipo)
+    data.setdefault("numeroFactura", f"{data.get('serie', '')}-{data.get('numero', '')}".strip("-"))
+    return data
+
+
+def validar_nif_formato(nif: str) -> bool:
+    """
+    Valida formato básico de NIF/NIE/CIF español.
+    """
+    if not nif:
         return False
 
+    nif = nif.strip().upper()
+
+    if len(nif) != 9:
+        return False
+
+    if nif[:8].isdigit() and nif[8].isalpha():
+        return True
+
+    if nif[0].isalpha() and nif[0] in "ABCDEFGHJNPQRSUVW" and nif[1:].isdigit():
+        return True
+
+    if nif[0] in "XYZABCDEFGHJNPQRSUVW" and nif[1:8].isdigit() and nif[8].isalpha():
+        return True
+
+    return False
+
+
+VeriFactiTransformer.validar_nif_formato = staticmethod(validar_nif_formato)

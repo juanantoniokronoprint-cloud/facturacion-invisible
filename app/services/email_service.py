@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Iterable
 
@@ -11,7 +11,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-from app.config import ASESOR_EMAIL, CONTABILIDAD_EMAIL, GOG_ACCOUNT, OUTBOX_DIR
+from app.config import ASESOR_EMAIL, CONTABILIDAD_EMAIL, EMAIL_SEND_MODE, GOG_ACCOUNT, OUTBOX_DIR
 from app.services.document_service import accounting_report_path
 
 
@@ -28,10 +28,16 @@ def _normalize_emails(values: Iterable[str] | None) -> list[str]:
 
 
 def _write_outbox(payload: dict) -> dict:
-    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S-%f")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
     path = OUTBOX_DIR / f"{stamp}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"success": True, "message": f"Guardado en outbox: {path}", "outbox_path": str(path), "mode": "outbox"}
+    return {
+        "success": True,
+        "message": f"Guardado en outbox: {path}",
+        "path": str(path),
+        "outbox_path": str(path),
+        "mode": "outbox",
+    }
 
 
 def send_email(
@@ -60,7 +66,7 @@ def send_email(
     if not to_list:
         return {"success": False, "error": "No hay destinatarios"}
 
-    if not GOG_ACCOUNT:
+    if EMAIL_SEND_MODE != "live" or not GOG_ACCOUNT:
         return _write_outbox(payload)
 
     cmd = [

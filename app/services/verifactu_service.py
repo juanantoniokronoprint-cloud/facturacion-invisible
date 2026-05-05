@@ -3,7 +3,7 @@ Servicio de integración con VeriFacti API
 Documentación: https://www.verifacti.com/desarrolladores/ejemplos
 """
 import os
-import requests
+import httpx
 import json
 import logging
 from datetime import datetime
@@ -35,8 +35,8 @@ class VerifactuAPI:
     """Cliente para la API de Verifactu"""
     
     def __init__(self, api_key: str = None):
-        self.api_key = api_key or VERIFACTU_API_KEY
-        self.base_url = VERIFACTU_API_URL
+        self.api_key = api_key or VERIFACTI_API_KEY
+        self.base_url = VERIFACTI_API_URL
         
     def _headers(self):
         return {
@@ -53,12 +53,7 @@ class VerifactuAPI:
         url = f"{self.base_url}/verifactu/create"
         
         try:
-            response = requests.post(
-                url, 
-                json=factura_data, 
-                headers=self._headers(),
-                timeout=30
-            )
+            response = httpx.post(url, json=factura_data, headers=self._headers(), timeout=30)
             
             if response.status_code in (200, 201):
                 logger.info("Factura enviada a Verifactu correctamente")
@@ -79,7 +74,7 @@ class VerifactuAPI:
         url = f"{self.base_url}/facturas/{factura_id}/estado"
         
         try:
-            response = requests.get(url, headers=self._headers(), timeout=30)
+            response = httpx.get(url, headers=self._headers(), timeout=30)
             return response.json() if response.status_code == 200 else {"status": "error"}
         except Exception as e:
             return {"status": "error", "message": str(e)}
@@ -354,3 +349,8 @@ def enviar_factura_a_verifactu(factura_data: dict) -> dict:
     """Envía una factura a la API de Verifactu"""
     api = VerifactuAPI()
     return api.crear_factura(factura_data)
+
+
+def enviar_factura_verificacion(factura_data: dict) -> dict:
+    """Alias legacy para smoke tests/integraciones antiguas."""
+    return enviar_factura_a_verifactu(factura_data)

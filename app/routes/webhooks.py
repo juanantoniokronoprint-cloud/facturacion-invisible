@@ -1,17 +1,34 @@
-from fastapi import APIRouter, Request
+import secrets
+
+from fastapi import APIRouter, Header, HTTPException, Request, status
 from telegram import Update
-from telegram.ext import Application, ContextTypes
 from app.services.telegram_bot import process_update
 from app.services.whatsapp_handler import process_whatsapp_message, transcribe_audio
 import logging
-import os
+
+from app.config import TELEGRAM_WEBHOOK_SECRET, WHATSAPP_WEBHOOK_SECRET
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+
+def _verify_webhook_secret(configured_secret: str, provided_secret: str | None, header_name: str) -> None:
+    if not configured_secret:
+        return
+    if not provided_secret or not secrets.compare_digest(provided_secret, configured_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Webhook no autorizado: falta o no coincide {header_name}",
+        )
+
 @router.post("/telegram")
-async def telegram_webhook(request: Request):
+async def telegram_webhook(request: Request, x_telegram_bot_api_secret_token: str | None = Header(default=None)):
     """Webhook para Telegram Bot"""
+    _verify_webhook_secret(
+        TELEGRAM_WEBHOOK_SECRET,
+        x_telegram_bot_api_secret_token,
+        "X-Telegram-Bot-Api-Secret-Token",
+    )
     try:
         update_data = await request.json()
         update = Update.de_json(update_data, bot=None)
@@ -22,8 +39,9 @@ async def telegram_webhook(request: Request):
         return {"ok": False, "error": str(e)}
 
 @router.post("/whatsapp")
-async def whatsapp_webhook(request: Request):
+async def whatsapp_webhook(request: Request, x_webhook_secret: str | None = Header(default=None)):
     """Webhook para WhatsApp - mensajes del bridge ERP"""
+    _verify_webhook_secret(WHATSAPP_WEBHOOK_SECRET, x_webhook_secret, "X-Webhook-Secret")
     try:
         data = await request.json()
         from_number = data.get("from", "")

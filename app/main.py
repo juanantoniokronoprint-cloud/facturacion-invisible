@@ -1,22 +1,36 @@
-import os
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.routes import webhooks, facturas, clientes
-from app.config import EMISOR_NIF, EMISOR_NOMBRE, EMISOR_DOMICILIO, EMISOR_CP, EMISOR_POBLACION, EMISOR_PROVINCIA
+from app.models.models import init_db
+from app.config import (
+    ALLOWED_ORIGINS,
+    EMISOR_CP,
+    EMISOR_DOMICILIO,
+    EMISOR_NIF,
+    EMISOR_NOMBRE,
+    EMISOR_POBLACION,
+    EMISOR_PROVINCIA,
+    ENVIRONMENT,
+)
+from app.services.auth import get_api_key
+from app.services.settings import production_readiness
 
 load_dotenv()
+init_db()
 
 app = FastAPI(
     title="Facturación Invisible API",
     description="Asistente contable por Telegram para freelancers",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url="/docs" if ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if ENVIRONMENT != "production" else None,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,6 +39,16 @@ app.add_middleware(
 app.include_router(webhooks.router, prefix="/webhook", tags=["webhooks"])
 app.include_router(facturas.router, prefix="/api/facturas", tags=["facturas"])
 app.include_router(clientes.router, prefix="/api/clientes", tags=["clientes"])
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    return response
 
 @app.get("/")
 def landing():
@@ -35,13 +59,19 @@ def landing():
 def health():
     return {"status": "healthy"}
 
+
+@app.get("/ready")
+def ready():
+    readiness = production_readiness()
+    return {"status": "ready" if readiness["ready"] else "not-ready", **readiness}
+
 @app.get("/portal")
 def portal():
     """Serve the client portal"""
     return FileResponse("static/portal.html")
 
 @app.get("/api/config")
-def get_config():
+def get_config(x_api_key: str = Depends(get_api_key)):
     """Get company configuration"""
     from app.config import CONTABILIDAD_EMAIL, ASESOR_EMAIL, TELEFONOS_AUTORIZADOS
     telefonos_str = ""
@@ -86,7 +116,7 @@ def get_help():
     }
 
 @app.put("/api/config")
-def update_config(config: dict):
+def update_config(config: dict, x_api_key: str = Depends(get_api_key)):
     """Update company configuration (saves to .env)"""
     env_path = ".env"
     

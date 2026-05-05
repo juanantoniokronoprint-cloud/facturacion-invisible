@@ -232,6 +232,7 @@
                     <button class="btn btn-primary" onclick="showTab('facturas')">📋 Ver facturas</button>
                     <button class="btn btn-secondary" onclick="showTab('informes')">📈 Informes</button>
                     <button class="btn btn-secondary" onclick="showTab('config')">⚙️ Configuración</button>
+                    <button class="btn btn-warn" onclick="setApiKey()">🔐 API Key</button>
                 </div>
                 <div id="global-notice" class="notice" style="margin-top:14px;"></div>
             </div>
@@ -630,8 +631,33 @@
             return 'badge badge-other';
         }
 
+        function getApiKey() {
+            return localStorage.getItem('fi_api_key') || '';
+        }
+
+        function setApiKey() {
+            const current = getApiKey();
+            const value = prompt('API Key del portal', current);
+            if (value === null) return;
+            if (value.trim()) {
+                localStorage.setItem('fi_api_key', value.trim());
+                showNotice('✓ API Key guardada en este navegador', false, 'global-notice', true);
+            } else {
+                localStorage.removeItem('fi_api_key');
+                showNotice('API Key eliminada de este navegador', false, 'global-notice', true);
+            }
+        }
+
+        function authHeaders(extra = {}) {
+            const headers = { ...extra };
+            const apiKey = getApiKey();
+            if (apiKey) headers['X-API-Key'] = apiKey;
+            return headers;
+        }
+
         async function api(path, options = {}) {
-            const resp = await fetch(path, options);
+            const headers = authHeaders(options.headers || {});
+            const resp = await fetch(path, { ...options, headers });
             let data = null;
             const text = await resp.text();
             try { data = text ? JSON.parse(text) : null; } catch (_) { data = { detail: text }; }
@@ -709,6 +735,8 @@
                                     <button class="btn btn-sm btn-primary" onclick="sendFacturaEmail(${factura.id})">✉️</button>
                                     <button class="btn btn-sm btn-success" onclick="shareFacturaWhatsapp(${factura.id})">💬</button>
                                     <button class="btn btn-sm btn-warn" onclick="editarFactura(${factura.id})">✏️</button>
+                                    ${factura.serie !== 'AB' && factura.serie !== 'FR' && !(factura.tipo_factura || '').startsWith('R') ? `<button class="btn btn-sm btn-secondary" onclick="crearAbono(${factura.id})">↩️ Abono</button>` : ''}
+                                    ${factura.serie !== 'AB' && factura.serie !== 'FR' && !(factura.tipo_factura || '').startsWith('R') ? `<button class="btn btn-sm btn-secondary" onclick="crearRectificativa(${factura.id})">🧾 Rect.</button>` : ''}
                                     ${btnPagada}
                                 </div>
                             </td>
@@ -762,6 +790,64 @@
                 await api(`/api/facturas/${id}/estado?estado=pagada`, { method: 'PATCH' });
                 showNotice('✓ Factura marcada como cobrada', false, 'global-notice', true);
                 filtrarFacturas();
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        async function crearAbono(id) {
+            const factura = facturasCache.find(f => f.id === id);
+            if (!factura) return showNotice('❌ Factura no encontrada', true);
+            const base = prompt(`Base a abonar para ${factura.serie}-${factura.numero}`, Math.abs(factura.base_imponible || 0).toFixed(2));
+            if (base === null) return;
+            const motivo = prompt('Motivo del abono', 'Abono/devolución de factura');
+            if (motivo === null) return;
+            try {
+                const data = await api(`/api/facturas/${id}/abono`, {
+                    method: 'POST',
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        base_imponible: parseFloat(base),
+                        iva_pct: factura.iva_pct || 21,
+                        irpf_pct: factura.irpf_pct || 0,
+                        concepto: motivo,
+                        motivo,
+                    }),
+                });
+                showNotice(`✓ Abono creado: ${data.factura.serie}-${data.factura.numero}`, false, 'global-notice', true);
+                loadFacturas(currentBuscar, currentEstado, currentPage);
+            } catch (error) {
+                showNotice('❌ ' + error.message, true);
+            }
+        }
+
+        async function crearRectificativa(id) {
+            const factura = facturasCache.find(f => f.id === id);
+            if (!factura) return showNotice('❌ Factura no encontrada', true);
+            const tipoFactura = (prompt('Tipo de rectificativa (R1, R2, R3, R4 o R5)', 'R1') || '').toUpperCase();
+            if (!tipoFactura) return;
+            const tipoRectificacion = (prompt('Tipo de rectificación: I=diferencias, S=sustitución', 'I') || '').toUpperCase();
+            if (!tipoRectificacion) return;
+            const base = prompt('Base de la rectificativa (usa negativo para abonar por diferencias)', (-Math.abs(factura.base_imponible || 0)).toFixed(2));
+            if (base === null) return;
+            const motivo = prompt('Motivo de la rectificación', 'Rectificación de factura');
+            if (motivo === null) return;
+            try {
+                const data = await api(`/api/facturas/${id}/rectificativa`, {
+                    method: 'POST',
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        tipo_factura: tipoFactura,
+                        tipo_rectificacion: tipoRectificacion,
+                        base_imponible: parseFloat(base),
+                        iva_pct: factura.iva_pct || 21,
+                        irpf_pct: factura.irpf_pct || 0,
+                        concepto: motivo,
+                        motivo,
+                    }),
+                });
+                showNotice(`✓ Rectificativa creada: ${data.factura.serie}-${data.factura.numero}`, false, 'global-notice', true);
+                loadFacturas(currentBuscar, currentEstado, currentPage);
             } catch (error) {
                 showNotice('❌ ' + error.message, true);
             }
@@ -874,7 +960,7 @@
             const email = prompt('Email del cliente', defaultEmail);
             if (email === null) return;
             try {
-                const data = await api(`/api/facturas/${id}/enviar-email?email=${encodeURIComponent(email)}`);
+                const data = await api(`/api/facturas/${id}/enviar-email?email=${encodeURIComponent(email)}`, { method: 'POST' });
                 showNotice(`✓ Factura enviada a ${data.to}`, false, 'global-notice', true);
             } catch (error) {
                 showNotice('❌ ' + error.message, true);
@@ -923,7 +1009,10 @@
         async function exportarFacturas(formato) {
             try {
                 const anno = new Date().getFullYear();
-                const response = await fetch(`/api/facturas/exportar?anno=${anno}&formato=${formato}`);
+                const response = await fetch(`/api/facturas/exportar?anno=${anno}&formato=${formato}`, {
+                    headers: authHeaders(),
+                });
+                if (!response.ok) throw new Error(`Error ${response.status}`);
                 const blob = await response.blob();
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -979,7 +1068,7 @@
             try {
                 const factura = await api('/api/facturas/simple', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload),
                 });
                 showNotice('✓ Factura creada correctamente', false, 'factura-form-notice', true);
@@ -1008,7 +1097,7 @@
             try {
                 await api('/api/config', {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify(payload),
                 });
                 showNotice('✓ Datos guardados correctamente', false, 'global-notice', true);

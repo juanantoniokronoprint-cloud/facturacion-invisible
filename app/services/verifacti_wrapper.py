@@ -2,13 +2,16 @@
 Wrapper para VeriFacti usando el cliente copiado del ERP
 """
 import asyncio
-from app.config import VERIFACTI_API_KEY
+from app.config import VERIFACTI_API_KEY, VERIFACTI_SEND_MODE
 from app.services.verifacti_client import VeriFactiClient
 
 async def enviar_factura_verifacti(factura, cliente, tipo_factura="F1") -> dict:
     """Envía una factura a VeriFacti"""
+    if VERIFACTI_SEND_MODE != "live":
+        return {"success": True, "status": "demo", "message": "Modo demo - factura no enviada a VeriFacti"}
+
     if not VERIFACTI_API_KEY:
-        return {"success": False, "status": "demo", "message": "Modo demo - API key no configurada"}
+        return {"success": False, "status": "error", "message": "API key VeriFacti no configurada"}
     
     client = VeriFactiClient(VERIFACTI_API_KEY)
     

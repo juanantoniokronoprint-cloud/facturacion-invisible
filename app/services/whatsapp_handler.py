@@ -5,6 +5,7 @@ Procesa mensajes derivados desde el bridge del ERP
 import os
 import json
 import logging
+import re
 from datetime import datetime
 from openai import OpenAI
 from app.config import (
@@ -18,6 +19,22 @@ from app.services.email_service import send_factura_copy_to_advisor, send_factur
 from app.services.verifacti_wrapper import enviar_factura_verifacti
 
 logger = logging.getLogger(__name__)
+
+
+NIF_CIF_PATTERN = re.compile(
+    r"^("
+    r"\d{8}[A-Z]|"  # DNI/NIF persona física
+    r"[XYZ]\d{7}[A-Z]|"  # NIE
+    r"[ABCDEFGHJKLMNPQRSUVW]\d{7}[0-9A-J]"  # CIF/NIF entidad
+    r")$"
+)
+
+
+def es_nif_cif_valido(valor: str | None) -> bool:
+    """Valida formato básico de NIF/NIE/CIF español sin calcular letra de control."""
+    if not valor:
+        return False
+    return bool(NIF_CIF_PATTERN.match(str(valor).upper().strip()))
 
 
 def normalizar_telefono(telefono: str) -> str:
@@ -52,13 +69,27 @@ Responde en JSON con:
     "cliente_nif": "NIF del cliente (formato español: 8 dígitos + letra mayúscula)",
     "cliente_nombre": "Nombre completo del cliente",
     "importe": 0.0,
+    "importe_incluye_iva": false,
     "iva": 21,
     "irpf": 0,
     "concepto": "Descripción del trabajo o servicio"
 }}
 
 Si el cliente NO tiene NIF o dice "sin NIF", usa cliente_nif: null.
-Si dice "factura simplificada", usa cliente_nif: null."""
+Si dice "factura simplificada", usa cliente_nif: null.
+Si el usuario dice "IVA incluido", "total con IVA" o similar, marca importe_incluye_iva: true."""
+
+
+def normalizar_importe_extraido(datos: dict) -> dict:
+    """Convierte importes IVA incluido a base imponible antes de calcular factura."""
+    datos = dict(datos)
+    importe = float(datos.get("importe", 0) or 0)
+    iva_pct = float(datos.get("iva", 21) or 0)
+    incluye_iva = bool(datos.get("importe_incluye_iva"))
+    if incluye_iva and importe > 0 and iva_pct > 0:
+        datos["total_iva_incluido_original"] = round(importe, 2)
+        datos["importe"] = round(importe / (1 + iva_pct / 100), 2)
+    return datos
 
 
 async def process_whatsapp_message(from_number: str, text: str) -> dict:
@@ -90,10 +121,7 @@ async def process_whatsapp_message(from_number: str, text: str) -> dict:
                 return await confirmar_factura(from_number, sesion)
         elif sesion_esperando_nif:
             # El usuario responde con un NIF directamente (sin "NIF:")
-            # Detectar formato NIF español: 8 dígitos + letra, o letra + 7 dígitos + letra
-            import re
-            nif_match = re.match(r'^([XYZ\d]?\d{7,8}[A-Z])$', text.strip().upper())
-            if nif_match:
+            if es_nif_cif_valido(text):
                 nif = text.strip().upper()
                 if sesion.get("datos"):
                     sesion["datos"]["cliente_nif"] = nif
@@ -167,7 +195,7 @@ async def extraer_datos_factura(from_number: str, texto: str) -> dict:
             response_format={"type": "json_object"}
         )
         
-        datos = json.loads(response.choices[0].message.content)
+        datos = normalizar_importe_extraido(json.loads(response.choices[0].message.content))
         
         # Validar datos requeridos
         errores = []
@@ -182,12 +210,8 @@ async def extraer_datos_factura(from_number: str, texto: str) -> dict:
         # Validar formato NIF español (8 dígitos + letra mayúscula) o NIE
         nif = datos.get("cliente_nif")
         if nif and nif not in ["", "null", "None"]:
-            import re
             nif_upper = nif.upper().strip()
-            # NIF: 8 dígitos + letra (ej: 12345678A)
-            # NIE: X/Y/Z + 7 dígitos + letra (ej: X1234567A, Y1234567B, Z1234567C)
-            nif_valido = bool(re.match(r'^[XYZ]?\d{7,8}[A-Z]$', nif_upper))
-            if not nif_valido:
+            if not es_nif_cif_valido(nif_upper):
                 return {"response": "❌ El NIF no tiene formato válido.\n\nFormatos válidos:\n- DNI: 8 dígitos + letra (ej: 12345678A)\n- NIE: X/Y/Z/A-W + 7 dígitos + letra (ej: X1234567A, A1234567B)\n- NIF empresa: letra + 8 dígitos (ej: B12345678)"}
         
         # Validar límite F2 (factura simplificada): máximo 400€ IVA incluido
@@ -221,7 +245,9 @@ async def extraer_datos_factura(from_number: str, texto: str) -> dict:
             respuesta += f"📄 NIF: {datos.get('cliente_nif')}\n"
             
         respuesta += f"📝 Concepto: {datos.get('concepto', 'N/A')}\n"
-        respuesta += f"💰 Importe: {datos.get('importe', 0)}€\n"
+        respuesta += f"💰 Base imponible: {datos.get('importe', 0)}€\n"
+        if datos.get("total_iva_incluido_original"):
+            respuesta += f"💶 Total indicado con IVA: {datos.get('total_iva_incluido_original')}€\n"
         respuesta += f"📊 IVA: {datos.get('iva', 21)}%\n"
         respuesta += f"📉 IRPF: {datos.get('irpf', 0)}%\n\n"
         
@@ -293,15 +319,30 @@ async def confirmar_factura(from_number: str, sesion: dict) -> dict:
             # Determinar serie según tipo
             if tipo_operacion == "abono":
                 serie = "AB"
+                tipo_factura_db = "R1"
+                tipo_rectificacion_db = "I"
             elif tipo_operacion == "rectificativa":
                 serie = "FR"
+                tipo_factura_db = datos.get("tipo_rectificativa", "R1")
+                tipo_rectificacion_db = datos.get("tipo_rectificacion", "I")
             else:
                 serie = "FI"
+                tipo_factura_db = "F2" if sesion.get("_factura_simplificada", False) else "F1"
+                tipo_rectificacion_db = None
             
             # Obtener siguiente número
             ultimo = db.query(Factura).filter(Factura.serie == serie).order_by(Factura.numero.desc()).first()
             siguiente_num = str(int(ultimo.numero) + 1) if ultimo and ultimo.numero else "1"
             
+            factura_origen_id = None
+            factura_origen = sesion.get("factura_origen") or {}
+            if factura_origen.get("serie") and factura_origen.get("numero"):
+                origen = db.query(Factura).filter(
+                    Factura.serie == factura_origen.get("serie"),
+                    Factura.numero == str(factura_origen.get("numero")),
+                ).first()
+                factura_origen_id = origen.id if origen else None
+
             factura = Factura(
                 cliente_id=cliente.id,
                 serie=serie,
@@ -313,12 +354,12 @@ async def confirmar_factura(from_number: str, sesion: dict) -> dict:
                 irpf_pct=irpf_pct,
                 irpf_cuota=irpf,
                 total=total,
-                estado="pagada"
+                estado="pagada",
+                tipo_factura=tipo_factura_db,
+                tipo_rectificacion=tipo_rectificacion_db,
+                motivo_rectificacion=datos.get("concepto") if tipo_operacion in {"abono", "rectificativa"} else None,
+                factura_origen_id=factura_origen_id,
             )
-            
-            if tipo_operacion == "rectificativa":
-                tipo_rect = datos.get("tipo_rectificativa", "R1")
-                factura.tipo_rectificativa = tipo_rect
             
             db.add(factura)
             db.commit()

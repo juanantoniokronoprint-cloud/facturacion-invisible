@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.models.models import get_db, Cliente
-from pydantic import BaseModel
+from app.services.auth import get_api_key
+from pydantic import BaseModel, ConfigDict
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_api_key)])
 
 class ClienteCreate(BaseModel):
     nif: str
@@ -17,13 +18,12 @@ class ClienteCreate(BaseModel):
     telefono: str = None
 
 class ClienteResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     nif: str
     nombre: str
     email: str = None
-    
-    class Config:
-        from_attributes = True
 
 @router.post("/", response_model=ClienteResponse)
 def crear_cliente(cliente: ClienteCreate, db: Session = Depends(get_db)):

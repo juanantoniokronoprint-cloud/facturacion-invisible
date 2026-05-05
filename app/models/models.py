@@ -1,6 +1,5 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, create_engine, inspect, text
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from datetime import datetime
 from app.config import DATABASE_URL
 
@@ -33,7 +32,7 @@ class Factura(Base):
     id = Column(Integer, primary_key=True, index=True)
     numero = Column(String(20), index=True)
     serie = Column(String(10), default="FI")
-    anno = Column(Integer, default=datetime.now().year)
+    anno = Column(Integer, default=lambda: datetime.utcnow().year)
     
     cliente_id = Column(Integer, ForeignKey("clientes.id"))
     
@@ -50,6 +49,11 @@ class Factura(Base):
     estado = Column(String(20), default="borrador")
     pdf_path = Column(String(500))
     xml_path = Column(String(500))
+
+    tipo_factura = Column(String(5), default="F1")  # F1, F2, R1-R5
+    tipo_rectificacion = Column(String(1))  # S=sustitución, I=diferencias
+    motivo_rectificacion = Column(String(500))
+    factura_origen_id = Column(Integer, ForeignKey("facturas.id"))
     
     verifactu_enviada = Column(Boolean, default=False)
     verifactu_fecha = Column(DateTime)
@@ -58,6 +62,7 @@ class Factura(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     cliente = relationship("Cliente", back_populates="facturas")
+    factura_origen = relationship("Factura", remote_side=[id], uselist=False)
     lineas = relationship("LineaFactura", back_populates="factura")
 
 class LineaFactura(Base):
@@ -88,6 +93,25 @@ class Configuracion(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    ensure_schema_updates()
+
+
+def ensure_schema_updates():
+    """Migración ligera e idempotente para SQLite/SQLAlchemy sin Alembic."""
+    inspector = inspect(engine)
+    if "facturas" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("facturas")}
+    columns = {
+        "tipo_factura": "VARCHAR(5) DEFAULT 'F1'",
+        "tipo_rectificacion": "VARCHAR(1)",
+        "motivo_rectificacion": "VARCHAR(500)",
+        "factura_origen_id": "INTEGER",
+    }
+    with engine.begin() as conn:
+        for name, ddl in columns.items():
+            if name not in existing:
+                conn.execute(text(f"ALTER TABLE facturas ADD COLUMN {name} {ddl}"))
 
 def get_db():
     db = SessionLocal()

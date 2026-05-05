@@ -13,18 +13,36 @@ pip install -r requirements.txt
 
 ## Configuración
 
-Copia `.env.example` a `.env` y configura:
+Copia `.env.example` a `.env` y configura como mínimo:
 
 ```
 TELEGRAM_BOT_TOKEN=tu_token
 OPENAI_API_KEY=tu_key
 DATABASE_URL=sqlite:///facturas.db
+API_KEY=secreto_largo
 ```
 
 ## Ejecución
 
 ```bash
 uvicorn app.main:app --reload --port 8000
+```
+
+## Producción
+
+Ver `PRODUCTION.md`.
+
+Por seguridad, los emails quedan en `storage/outbox` salvo que configures explícitamente:
+
+```
+EMAIL_SEND_MODE=live
+GOG_ACCOUNT=...
+```
+
+Los endpoints operativos requieren:
+
+```
+X-API-Key: <API_KEY>
 ```
 
 ## Estructura
